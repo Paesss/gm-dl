@@ -1,0 +1,23 @@
+{
+  "name": "gm-dl",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.11",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.11",
+    "vite-plugin-monkey": "^8.0.0",
+    "vitest": "^1.0.0",
+    "jsdom": "^22.1.0"
+  },
+  "dependencies": {
+    "@types/tampermonkey": "^5.5.0"
+  }
+}
