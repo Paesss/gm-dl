@@ -1,13 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { downloadFile, gmXhr } from '../dl.js';
+
+const mockGMXmlhttpRequest = vi.fn();
+
+vi.mock('$', () => ({
+	GM_xmlhttpRequest: mockGMXmlhttpRequest,
+}));
+
+const { GM_dl, GM_xhr } = await import('../dl.js');
 
 describe('main', () => {
 	beforeEach(() => {
-		// clear any globals
-		// @ts-expect-error
-		delete globalThis.GM_xmlhttpRequest;
-		// @ts-expect-error
-		delete globalThis.GM_download;
+
+		// Ensure URL polyfills exist for non-browser environments
+		if (typeof URL.createObjectURL !== 'function') {
+			URL.createObjectURL = () => 'blob://polyfill';
+		}
+		if (typeof URL.revokeObjectURL !== 'function') {
+			URL.revokeObjectURL = () => {};
+		}
 	});
 
 	afterEach(() => {
@@ -17,70 +27,62 @@ describe('main', () => {
 	it('gmXhr resolves with the response and calls original onload', async () => {
 		const response = { status: 200, response: 'ok', statusText: 'OK' } as any;
 
-		// mock GM_xmlhttpRequest
-
-		globalThis.GM_xmlhttpRequest = (details: any) => {
+		mockGMXmlhttpRequest.mockImplementation((details: any) => {
 			details.onload?.(response);
 			return { abort: () => {} };
-		};
+		});
 
 		const onload = vi.fn();
-		const res = await gmXhr({ method: 'GET', url: 'http://x', onload });
+		const res = await GM_xhr({ method: 'GET', url: 'http://x', onload });
 		expect(res).toBe(response);
-		expect(onload).toHaveBeenCalled();
+		expect(onload).toHaveBeenCalledWith(response);
+	});
+
+	it('gmXhr emits onprogress without triggering settlement', async () => {
+		const progress = { loaded: 50, total: 100 } as any;
+		const response = { status: 200, response: 'ok', statusText: 'OK' } as any;
+
+		mockGMXmlhttpRequest.mockImplementation((details: any) => {
+			details.onprogress?.(progress);
+			details.onload?.(response);
+			return { abort: () => {} };
+		});
+
+		const onprogress = vi.fn();
+		const onload = vi.fn();
+		const res = await GM_xhr({ method: 'GET', url: 'http://x', onprogress, onload });
+
+		expect(onprogress).toHaveBeenCalledWith(progress);
+		expect(onload).toHaveBeenCalledWith(response);
+		expect(res).toBe(response);
 	});
 
 	it('downloadFile with Blob triggers DOM download', async () => {
-		// Ensure URL.createObjectURL exists in this environment
-
-		if (typeof URL.createObjectURL !== 'function') {
-			URL.createObjectURL = () => 'blob://polyfill';
-
-			URL.revokeObjectURL = () => {};
-		}
-
-		const createSpy = vi.spyOn(URL, 'createObjectURL');
-		const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+		const createSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
 		const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
 		const blob = new Blob(['hello']);
-		await downloadFile(blob, 'file.txt');
+		await GM_dl(blob, 'file.txt');
 
-		expect(createSpy).toHaveBeenCalled();
+		expect(createSpy).toHaveBeenCalledWith(blob);
 		expect(clickSpy).toHaveBeenCalled();
-
-		// restore
-		createSpy.mockRestore();
-		revokeSpy.mockRestore();
-		clickSpy.mockRestore();
 	});
 
 	it('downloadFile fetches via gmXhr and triggers download', async () => {
 		const blob = new Blob(['data']);
 		const response = { status: 200, response: blob, statusText: 'OK' } as any;
 
-		// Ensure URL.createObjectURL exists in this environment
-
-		if (typeof URL.createObjectURL !== 'function') {
-			URL.createObjectURL = () => 'blob://polyfill';
-
-			URL.revokeObjectURL = () => {};
-		}
-
-		const createSpy = vi.spyOn(URL, 'createObjectURL');
+		const createSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
 		const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
-		globalThis.GM_xmlhttpRequest = (details: any) => {
+		mockGMXmlhttpRequest.mockImplementation((details: any) => {
 			details.onload?.(response);
 			return { abort: () => {} };
-		};
+		});
 
-		await downloadFile('http://example.com/file', 'file.txt');
+		await GM_dl('http://example.com/file', 'file.txt');
 
-		expect(createSpy).toHaveBeenCalled();
+		expect(createSpy).toHaveBeenCalledWith(blob);
 		expect(clickSpy).toHaveBeenCalled();
-
-		createSpy.mockRestore();
-		clickSpy.mockRestore();
 	});
 });

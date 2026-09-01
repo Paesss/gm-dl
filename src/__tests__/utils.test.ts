@@ -1,8 +1,8 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: Suppressed for testing purposes */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
 	bindAbortSignal,
-	createSettledContext,
+	createSettled,
 	getAbortError,
 	normalizeDownloadOptions,
 } from '../utils.js';
@@ -31,21 +31,31 @@ describe('utils', () => {
 		expect(returned).toBe(obj);
 	});
 
-	it('createSettledContext ensures single invocation and cleanup', () => {
+	it('createSettled ensures single invocation and cleanup across wrapped functions', () => {
 		let cleaned = false;
-		const ctx = createSettledContext(() => () => {
+		const wrap = createSettled(() => {
 			cleaned = true;
 		});
 
-		const wrapped = ctx.wrap((v: number) => v * 2);
-		const res = (wrapped as any)(3);
+		const fn1 = vi.fn((v: number) => v * 2);
+		const fn2 = vi.fn();
+
+		const wrapped1 = wrap(fn1);
+		const wrapped2 = wrap(fn2);
+
+		const res = wrapped1(3);
 		expect(res).toBe(6);
 		expect(cleaned).toBe(true);
-		expect(ctx.settled).toBe(true);
+		expect(fn1).toHaveBeenCalledTimes(1);
 
-		// subsequent calls do nothing
-		const second = (wrapped as any)(4);
+		// Subsequent call to wrapped1 is ignored
+		const second = wrapped1(4);
 		expect(second).toBeUndefined();
+		expect(fn1).toHaveBeenCalledTimes(1);
+
+		// Calling another wrapped callback after settlement is also ignored
+		wrapped2();
+		expect(fn2).not.toHaveBeenCalled();
 	});
 
 	it('bindAbortSignal handles undefined signal and immediate abort', () => {

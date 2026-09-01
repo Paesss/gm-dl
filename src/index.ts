@@ -1,3 +1,4 @@
 export * from './dl.js';
-export * from './types.js';
-export * from './utils.js';
+export { default } from './dl.js';
+export type * from './types.js';
+

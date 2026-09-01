@@ -6,12 +6,11 @@ export default defineConfig({
   plugins: [
     
     monkey({
-      server: {
-        mountGmApi: true,
-      },
-      entry: 'src/index.ts',
+
+
+      entry: 'src/index.userscript.ts',
       userscript: {
-        grant: ['GM_download', 'GM_xmlhttpRequest', 'GM.xmlHttpRequest'],
+        grant: ['GM_download', 'GM_xmlhttpRequest', 'GM_info'],
         icon: 'https://vitejs.dev/logo.svg',
         namespace: 'npm/vite-plugin-monkey',
         match: ['*://*/*'],
