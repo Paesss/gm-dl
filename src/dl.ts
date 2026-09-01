@@ -112,19 +112,7 @@ export function GM_downloadAsync(
     });
 }
 
-export function GM_dl(url: string | Blob | File, name: string, signal?: AbortSignal): Promise<void>;
-export function GM_dl(options: ExtendedDownloadRequest): Promise<void>;
-export async function GM_dl(
-    optionsOrUrl: ExtendedDownloadRequest | string | Blob | File,
-    name?: string,
-    signalParam?: AbortSignal
-): Promise<void> {
-    const details = normalizeDownloadOptions(optionsOrUrl, name, signalParam);
-
-    if (isGmDownloadAvailable()) {
-        return GM_downloadAsync(details);
-    }
-
+export async function GM_dl_xhr(details: ExtendedDownloadRequest): Promise<void> {
     const {
         url,
         name: filename,
@@ -137,13 +125,8 @@ export async function GM_dl(
         onprogress: originalOnProgress,
     } = details;
 
-    if (isBlobOrFile(url)) {
-        if (signal?.aborted) {
-            throw getAbortError(signal);
-        }
-        triggerBlobDownload(url, filename);
-        originalOnload?.call(undefined as never);
-        return;
+    if (typeof url !== 'string') {
+        throw new TypeError('GM_dl_xhr requires a string URL');
     }
 
     try {
@@ -180,11 +163,38 @@ export async function GM_dl(
                 error: 'not_succeeded',
                 details: isError ? error.message : String(error),
             };
-            originalOnError?.call(errResponse, errResponse);
+            originalOnError?.call(errResponse as never, errResponse);
         }
 
         throw error;
     }
+}
+
+export function GM_dl(url: string | Blob | File, name: string, signal?: AbortSignal): Promise<void>;
+export function GM_dl(options: ExtendedDownloadRequest): Promise<void>;
+export async function GM_dl(
+    optionsOrUrl: ExtendedDownloadRequest | string | Blob | File,
+    name?: string,
+    signalParam?: AbortSignal
+): Promise<void> {
+    const details = normalizeDownloadOptions(optionsOrUrl, name, signalParam);
+
+    if (isGmDownloadAvailable()) {
+        return GM_downloadAsync(details);
+    }
+
+    const { url, signal } = details;
+
+    if (isBlobOrFile(url)) {
+        if (signal?.aborted) {
+            throw getAbortError(signal);
+        }
+        triggerBlobDownload(url, details.name);
+        details.onload?.call(undefined as never);
+        return;
+    }
+
+    return GM_dl_xhr(details);
 }
 
 export default GM_dl;

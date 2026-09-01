@@ -4,9 +4,11 @@ const mockGMXmlhttpRequest = vi.fn();
 
 vi.mock('$', () => ({
 	GM_xmlhttpRequest: mockGMXmlhttpRequest,
+	GM_download: undefined,
+	GM_info: {},
 }));
 
-const { GM_dl, GM_xhr } = await import('../dl.js');
+const { GM_dl, GM_dl_xhr, GM_xhr } = await import('../dl.js');
 
 describe('main', () => {
 	beforeEach(() => {
@@ -82,6 +84,40 @@ describe('main', () => {
 
 		await GM_dl('http://example.com/file', 'file.txt');
 
+		expect(createSpy).toHaveBeenCalledWith(blob);
+		expect(clickSpy).toHaveBeenCalled();
+	});
+
+	it('GM_dl_xhr fetches a blob and emits the same load/error behavior', async () => {
+		const blob = new Blob(['data']);
+		const response = { status: 200, response: blob, statusText: 'OK' } as any;
+		const onload = vi.fn();
+		const onerror = vi.fn();
+		const ontimeout = vi.fn();
+		const onprogress = vi.fn();
+		const createSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
+		const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+		mockGMXmlhttpRequest.mockImplementation((details: any) => {
+			details.onprogress?.({ loaded: 10, total: 10 });
+			details.onload?.(response);
+			return { abort: () => {} };
+		});
+
+		await GM_dl_xhr({
+			url: 'http://example.com/file',
+			name: 'file.txt',
+			headers: { Accept: 'application/octet-stream' },
+			onload,
+			onerror,
+			ontimeout,
+			onprogress,
+		});
+
+		expect(onprogress).toHaveBeenCalled();
+		expect(onload).toHaveBeenCalledTimes(1);
+		expect(onerror).not.toHaveBeenCalled();
+		expect(ontimeout).not.toHaveBeenCalled();
 		expect(createSpy).toHaveBeenCalledWith(blob);
 		expect(clickSpy).toHaveBeenCalled();
 	});
