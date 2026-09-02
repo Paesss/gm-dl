@@ -1,4 +1,4 @@
-import type { GmDownloadOptions, GmResponseType, GmXmlhttpRequestOption } from '$';
+import type { GmDownloadOptions, GmResponseType, GmXmlhttpRequestOption } from 'vite-plugin-monkey/dist/client'
 
 export type ExtendedRequest<R extends GmResponseType = 'text', C = any> = GmXmlhttpRequestOption<
 	R,

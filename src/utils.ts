@@ -1,7 +1,9 @@
-import { GM_download, GM_info, type GmAbortHandle } from '$';
+import { GM_download, GM_info, type GmAbortHandle } from 'vite-plugin-monkey/dist/client';
 import type { ExtendedDownloadRequest } from './types.js';
 
 const NOOP = () => {};
+
+export const isBlobOrFile = (v: unknown): v is Blob | File => v instanceof Blob;
 
 export function getAbortError(signal?: AbortSignal): Error {
     return signal?.reason ?? new DOMException('Aborted', 'AbortError');
@@ -12,21 +14,26 @@ export function normalizeDownloadOptions(
     name = 'download',
     signal?: AbortSignal
 ): ExtendedDownloadRequest {
-    if (typeof optionsOrUrl === 'string' || optionsOrUrl instanceof Blob) {
+    if (typeof optionsOrUrl === 'string' || isBlobOrFile(optionsOrUrl)) {
         return { url: optionsOrUrl, name, signal };
     }
-    return optionsOrUrl;
+    return {
+        ...optionsOrUrl,
+        name: optionsOrUrl.name ?? name,
+        signal: optionsOrUrl.signal ?? signal,
+    };
 }
 
 export function isGmDownloadAvailable(): boolean {
     const downloadMode = GM_info?.downloadMode;
+    if (downloadMode === 'disabled') return false;
     return downloadMode === 'native' || downloadMode === 'browser' || typeof GM_download === 'function';
 }
 
-export function bindAbortSignal(
+export function bindAbortSignal<H extends GmAbortHandle<any> = GmAbortHandle>(
     signal: AbortSignal | undefined,
     onAbort: (reason: Error) => void,
-    getHandle: () => GmAbortHandle | undefined
+    getHandle: () => H | undefined
 ): () => void {
     if (!signal) return NOOP;
 
@@ -86,21 +93,25 @@ export function executeWithSignal<H extends GmAbortHandle<any> = GmAbortHandle>(
 
     if (signal?.aborted) return;
 
-    abortHandle = executor(wrap);
+    try {
+        abortHandle = executor(wrap);
+    } catch (err) {
+        cleanup();
+        reject(err);
+    }
 }
-
-export const isBlobOrFile = (v: unknown): v is Blob | File => v instanceof Blob;
 
 export function triggerBlobDownload(
     blob: Blob | File,
     filename: string,
-    revokeDelayMs = 60000
+    revokeDelayMs = 10000
 ): void {
+    const objectUrl = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
-    anchor.href = URL.createObjectURL(blob);
+    anchor.href = objectUrl;
     anchor.download = filename;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(anchor.href), revokeDelayMs);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), revokeDelayMs);
 }
