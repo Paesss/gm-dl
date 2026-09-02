@@ -1,10 +1,3 @@
-import {
-	GM,
-	GM_download,
-	type GmDownloadErrorEvent,
-	type GmResponseEvent,
-	type GmResponseType,
-} from 'vite-plugin-monkey/dist/client';
 
 import type { ExtendedDownloadRequest, ExtendedRequest } from './types.js';
 
@@ -64,28 +57,17 @@ export function GM_xhr<R extends GmResponseType = 'blob', C = any>(
 	});
 }
 
-export function GM_download_native(
-	url: string | Blob | File,
-	name: string,
-	signal?: AbortSignal
-): Promise<void>;
-export function GM_download_native(options: ExtendedDownloadRequest): Promise<void>;
-export function GM_download_native(
-	optionsOrUrl: ExtendedDownloadRequest | string | Blob | File,
-	name?: string,
-	signalParam?: AbortSignal
-): Promise<void> {
-	const details = toDownloadRequest(optionsOrUrl, name, signalParam);
 
+export function GM_download_native(options: ExtendedDownloadRequest): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const {
 			signal,
 			onload: originalOnload,
 			onerror: originalOnError,
 			ontimeout: originalOnTimeout,
-			onprogress: originalOnProgress,
+			//onprogress: originalOnProgress,
 			...gmDetails
-		} = details;
+		} = options;
 
 		executeAbortable(signal, reject, (guard) =>
 			GM_download({
@@ -103,9 +85,9 @@ export function GM_download_native(
 					reject(new Error('Download timed out'));
 				}),
 				// Progress events are non-terminal, so they bypass guard
-				onprogress: (prog) => {
+				/**onprogress: (prog) => {
 					originalOnProgress?.call(prog, prog);
-				},
+				},**/
 			})
 		);
 	});

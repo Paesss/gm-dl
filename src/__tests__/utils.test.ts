@@ -1,15 +1,15 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: Suppressed for testing purposes */
 import { describe, expect, it, vi } from 'vitest';
 import {
-	bindAbortSignal,
-	createSettled,
-	getAbortError,
-	normalizeDownloadOptions,
+	attachAbortListener,
+	createOnceGuard,
+	resolveAbortError,
+	toDownloadRequest,
 } from '../utils.js';
 
 describe('utils', () => {
 	it('getAbortError returns DOMException when no signal reason', () => {
-		const err = getAbortError();
+		const err = resolveAbortError();
 		expect(err && (err as any).name).toBe('AbortError');
 	});
 
@@ -17,23 +17,23 @@ describe('utils', () => {
 		const controller = new AbortController();
 		const reason = new Error('boom');
 		controller.abort(reason);
-		const err = getAbortError(controller.signal);
+		const err = resolveAbortError(controller.signal);
 		expect(err).toBe(reason);
 	});
 
 	it('normalizeDownloadOptions normalizes string and blob inputs', () => {
-		const fromString = normalizeDownloadOptions('https://example.com/file');
+		const fromString = toDownloadRequest('https://example.com/file');
 		expect((fromString as any).url).toBe('https://example.com/file');
 		expect((fromString as any).name).toBe('download');
 
 		const obj = { url: 'x', name: 'y', signal: undefined } as any;
-		const returned = normalizeDownloadOptions(obj);
+		const returned = toDownloadRequest(obj);
 		expect(returned).toBe(obj);
 	});
 
-	it('createSettled ensures single invocation and cleanup across wrapped functions', () => {
+	it('createOnceGuard ensures single invocation and cleanup across wrapped functions', () => {
 		let cleaned = false;
-		const wrap = createSettled(() => {
+		const wrap = createOnceGuard(() => {
 			cleaned = true;
 		});
 
@@ -59,7 +59,7 @@ describe('utils', () => {
 	});
 
 	it('bindAbortSignal handles undefined signal and immediate abort', () => {
-		const noop = bindAbortSignal(
+		const noop = attachAbortListener(
 			undefined,
 			() => {},
 			() => undefined
@@ -71,7 +71,7 @@ describe('utils', () => {
 		controller.abort(reason);
 
 		let called = false;
-		bindAbortSignal(
+		attachAbortListener(
 			controller.signal,
 			(r) => {
 				called = true;
@@ -92,7 +92,7 @@ describe('utils', () => {
 				abortedHandle = true;
 			},
 		};
-		bindAbortSignal(
+		attachAbortListener(
 			controller.signal,
 			() => {
 				called = true;

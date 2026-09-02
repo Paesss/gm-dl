@@ -11,10 +11,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.11",
-    "jsdom": "^22.1.0",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.11",
-    "vite-plugin-monkey": "^8.0.0",
-    "vitest": "^1.0.0"
+    "@types/node": "^26.4.1",
+    "jsdom": "^30.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vite-plugin-monkey": "^8.1.1",
+    "vitest": "^4.1.11"
   }
 }
