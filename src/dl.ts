@@ -1,21 +1,24 @@
 import {
+	GM,
 	GM_download,
-	GM_xmlhttpRequest,
 	type GmDownloadErrorEvent,
 	type GmResponseEvent,
 	type GmResponseType,
 } from 'vite-plugin-monkey/dist/client';
+
 import type { ExtendedDownloadRequest, ExtendedRequest } from './types.js';
+
 import {
-	executeWithSignal,
-	getAbortError,
+	executeAbortable,
 	isBlobOrFile,
 	isGmDownloadAvailable,
-	normalizeDownloadOptions,
+	resolveAbortError,
+	toDownloadRequest,
 	triggerBlobDownload,
 } from './utils.js';
 
-export function GM_xhr<R extends GmResponseType = 'text', C = any>(
+
+export function GM_xhr<R extends GmResponseType = 'blob', C = any>(
 	details: ExtendedRequest<R, C>
 ): Promise<GmResponseEvent<R, C>> {
 	return new Promise((resolve, reject) => {
@@ -29,29 +32,29 @@ export function GM_xhr<R extends GmResponseType = 'text', C = any>(
 			...gmDetails
 		} = details;
 
-		executeWithSignal(
+		executeAbortable(
 			signal,
 			reject,
-			(wrap) =>
-				GM_xmlhttpRequest({
+			(guard) =>
+				GM.xmlHttpRequest({
 					...gmDetails,
-					onload: wrap((res) => {
+					onload: guard((res) => {
 						originalOnload?.call(res, res);
 						resolve(res);
 					}),
-					onerror: wrap((err) => {
+					onerror: guard((err) => {
 						originalOnError?.call(err, err);
 						reject(err);
 					}),
-					ontimeout: wrap(() => {
+					ontimeout: guard(() => {
 						originalOnTimeout?.call(undefined as never);
 						reject(new Error('Request timed out'));
 					}),
-					onabort: wrap(() => {
+					onabort: guard(() => {
 						originalOnAbort?.call(undefined as never);
-						reject(getAbortError(signal));
+						reject(resolveAbortError(signal));
 					}),
-					// Progress events are non-terminal, so they bypass wrap
+					// Progress events are non-terminal, so they bypass guard
 					onprogress: (progress) => {
 						originalOnProgress?.call(progress, progress);
 					},
@@ -72,7 +75,7 @@ export function GM_download_native(
 	name?: string,
 	signalParam?: AbortSignal
 ): Promise<void> {
-	const details = normalizeDownloadOptions(optionsOrUrl, name, signalParam);
+	const details = toDownloadRequest(optionsOrUrl, name, signalParam);
 
 	return new Promise((resolve, reject) => {
 		const {
@@ -84,22 +87,22 @@ export function GM_download_native(
 			...gmDetails
 		} = details;
 
-		executeWithSignal(signal, reject, (wrap) =>
+		executeAbortable(signal, reject, (guard) =>
 			GM_download({
 				...gmDetails,
-				onload: wrap(() => {
+				onload: guard(() => {
 					originalOnload?.call(undefined as never);
 					resolve();
 				}),
-				onerror: wrap((err) => {
+				onerror: guard((err) => {
 					originalOnError?.call(err, err);
 					reject(err);
 				}),
-				ontimeout: wrap(() => {
+				ontimeout: guard(() => {
 					originalOnTimeout?.call(undefined as never);
 					reject(new Error('Download timed out'));
 				}),
-				// Progress events are non-terminal, so they bypass wrap
+				// Progress events are non-terminal, so they bypass guard
 				onprogress: (prog) => {
 					originalOnProgress?.call(prog, prog);
 				},
@@ -107,6 +110,9 @@ export function GM_download_native(
 		);
 	});
 }
+const MAX_XHR_FILE_SIZE_MB = 500;
+const MAX_XHR_FILE_SIZE_BYTES = MAX_XHR_FILE_SIZE_MB * 1024 ** 2;
+
 
 export async function GM_dl_xhr(details: ExtendedDownloadRequest): Promise<void> {
 	const {
@@ -126,6 +132,18 @@ export async function GM_dl_xhr(details: ExtendedDownloadRequest): Promise<void>
 	}
 
 	try {
+		let checkedFileSize = false;
+		const checkFileSize = (bytes: number) => {
+			if (!checkedFileSize && bytes > MAX_XHR_FILE_SIZE_BYTES) {
+				checkedFileSize = true;
+				const fileSizeMB = (bytes / (1024 * 1024)).toFixed(2);
+				console.warn(
+					`[GM_dl_xhr] Warning: File size of ${fileSizeMB} mb exceeds the ${MAX_XHR_FILE_SIZE_MB} mb threshold.
+                    This may lead to performance issues or browser limitations.`
+				);
+			}
+		};
+
 		const response = await GM_xhr({
 			method: 'GET',
 			url,
@@ -133,14 +151,26 @@ export async function GM_dl_xhr(details: ExtendedDownloadRequest): Promise<void>
 			timeout,
 			signal,
 			responseType: 'blob',
-			onprogress: originalOnProgress,
+			onprogress: (progress) => {
+				if (progress.total) {
+					checkFileSize(progress.total);
+				} else if (progress.loaded) {
+					checkFileSize(progress.loaded);
+				}
+				originalOnProgress?.call(progress, progress);
+			},
 		});
 
 		if (response.status < 200 || response.status >= 300) {
 			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 		}
 
-		triggerBlobDownload(response.response as Blob, filename);
+		const blob = response.response as Blob;
+		if (blob?.size) {
+			checkFileSize(blob.size);
+		}
+
+		triggerBlobDownload(blob, filename);
 		originalOnload?.call(undefined as never);
 	} catch (error: unknown) {
 		const isError = error instanceof Error;
@@ -168,13 +198,13 @@ export async function GM_dl(
 	name?: string,
 	signalParam?: AbortSignal
 ): Promise<void> {
-	const details = normalizeDownloadOptions(optionsOrUrl, name, signalParam);
+	const details = toDownloadRequest(optionsOrUrl, name, signalParam);
 	const { url, signal } = details;
 
 	// Direct Blob/File fallback (GM_download expects string URLs)
 	if (isBlobOrFile(url)) {
 		if (signal?.aborted) {
-			throw getAbortError(signal);
+			throw resolveAbortError(signal);
 		}
 		triggerBlobDownload(url, details.name);
 		details.onload?.call(undefined as never);

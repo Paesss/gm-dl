@@ -5,11 +5,11 @@ const NOOP = () => {};
 
 export const isBlobOrFile = (v: unknown): v is Blob | File => v instanceof Blob;
 
-export function getAbortError(signal?: AbortSignal): Error {
+export function resolveAbortError(signal?: AbortSignal): Error {
     return signal?.reason ?? new DOMException('Aborted', 'AbortError');
 }
 
-export function normalizeDownloadOptions(
+export function toDownloadRequest(
     optionsOrUrl: ExtendedDownloadRequest | string | Blob | File,
     name = 'download',
     signal?: AbortSignal
@@ -30,21 +30,21 @@ export function isGmDownloadAvailable(): boolean {
     return downloadMode === 'native' || downloadMode === 'browser' || typeof GM_download === 'function';
 }
 
-export function bindAbortSignal<H extends GmAbortHandle<any> = GmAbortHandle>(
+export function attachAbortListener<H extends GmAbortHandle<any> = GmAbortHandle>(
     signal: AbortSignal | undefined,
     onAbort: (reason: Error) => void,
-    getHandle: () => H | undefined
+    getAbortHandle: () => H | undefined
 ): () => void {
     if (!signal) return NOOP;
 
     if (signal.aborted) {
-        onAbort(getAbortError(signal));
+        onAbort(resolveAbortError(signal));
         return NOOP;
     }
 
     const abortHandler = () => {
-        getHandle()?.abort();
-        onAbort(getAbortError(signal));
+        getAbortHandle()?.abort();
+        onAbort(resolveAbortError(signal));
     };
 
     signal.addEventListener('abort', abortHandler, { once: true });
@@ -55,7 +55,7 @@ export function bindAbortSignal<H extends GmAbortHandle<any> = GmAbortHandle>(
  * Creates a wrapper for terminal callbacks (load, error, timeout, abort).
  * Guarantees that only the first terminal callback runs and triggers cleanup.
  */
-export function createSettled(cleanup: () => void) {
+export function createOnceGuard(cleanup: () => void) {
     let settled = false;
 
     return <Args extends unknown[], R>(fn?: (...args: Args) => R) =>
@@ -71,20 +71,20 @@ export function createSettled(cleanup: () => void) {
  * Helper to manage AbortSignal lifecycle, settled wrapper cleanup,
  * and standard handle binding for GM network calls.
  */
-export function executeWithSignal<H extends GmAbortHandle<any> = GmAbortHandle>(
+export function executeAbortable<H extends GmAbortHandle<any> = GmAbortHandle>(
     signal: AbortSignal | undefined,
     reject: (reason: unknown) => void,
-    executor: (wrap: ReturnType<typeof createSettled>) => H,
+    executor: (guard: ReturnType<typeof createOnceGuard>) => H | undefined,
     onAbort?: () => void
 ): void {
     let cleanup = NOOP;
     let abortHandle: H | undefined;
 
-    const wrap = createSettled(() => cleanup());
+    const guard = createOnceGuard(() => cleanup());
 
-    cleanup = bindAbortSignal(
+    cleanup = attachAbortListener(
         signal,
-        wrap((reason) => {
+        guard((reason) => {
             onAbort?.();
             reject(reason);
         }),
@@ -94,7 +94,7 @@ export function executeWithSignal<H extends GmAbortHandle<any> = GmAbortHandle>(
     if (signal?.aborted) return;
 
     try {
-        abortHandle = executor(wrap);
+        abortHandle = executor(guard);
     } catch (err) {
         cleanup();
         reject(err);
