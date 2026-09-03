@@ -1,13 +1,9 @@
-
+import { resolveAbortError } from './errors.js';
 import type { ExtendedDownloadRequest } from './types.js';
 
 const NOOP = () => {};
 
 export const isBlobOrFile = (v: unknown): v is Blob | File => v instanceof Blob;
-
-export function resolveAbortError(signal?: AbortSignal): Error {
-	return signal?.reason ?? new DOMException('Aborted', 'AbortError');
-}
 
 
 export function toDownloadRequest(
@@ -15,12 +11,10 @@ export function toDownloadRequest(
 	name = 'download',
 	signal?: AbortSignal
 ): ExtendedDownloadRequest {
-	if (optionsOrUrl instanceof URL) {
-		return { url: optionsOrUrl.toString(), name, signal };
-	} else if (typeof optionsOrUrl === 'string' || isBlobOrFile(optionsOrUrl)) {
+	if (typeof optionsOrUrl === 'string' || isBlobOrFile(optionsOrUrl)) {
 		return { url: optionsOrUrl, name, signal };
 	}
-    const { name: optionsName, signal: optionsSignal } = optionsOrUrl;
+	const { name: optionsName, signal: optionsSignal } = optionsOrUrl;
 	return {
 		...optionsOrUrl,
 		name: optionsName ?? name,
@@ -57,10 +51,6 @@ export function attachAbortListener<H extends GmAbortHandle<any> = GmAbortHandle
 	return () => signal.removeEventListener('abort', abortHandler);
 }
 
-/**
- * Creates a wrapper for terminal callbacks (load, error, timeout, abort).
- * Guarantees that only the first terminal callback runs and triggers cleanup.
- */
 export function createOnceGuard(cleanup: () => void) {
 	let settled = false;
 
@@ -73,10 +63,6 @@ export function createOnceGuard(cleanup: () => void) {
 		};
 }
 
-/**
- * Helper to manage AbortSignal lifecycle, settled wrapper cleanup,
- * and standard handle binding for GM network calls.
- */
 export function executeAbortable<H extends GmAbortHandle<any> = GmAbortHandle>(
 	signal: AbortSignal | undefined,
 	reject: (reason: unknown) => void,

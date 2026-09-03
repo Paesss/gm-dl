@@ -1,12 +1,5 @@
-import type { GmDownloadOptions, GmResponseType, GmXmlhttpRequestOption } from 'vite-plugin-monkey/dist/client'
-
-export type ExtendedRequest<R extends GmResponseType = 'blob', C = any> = GmXmlhttpRequestOption<
-	R,
-	C
-> & {
-	signal?: AbortSignal;
-};
 
 export type ExtendedDownloadRequest = GmDownloadOptions & {
+	onabort?: () => void;
 	signal?: AbortSignal;
 };

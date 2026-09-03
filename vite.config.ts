@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import monkey from 'vite-plugin-monkey';
+
 
 
 // https://vitejs.dev/config/
