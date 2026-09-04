@@ -129,9 +129,9 @@ function GM_dl_xhr(details: ExtendedDownloadRequest): Promise<void> {
 	});
 }
 
-export function GM_dl(url: string | Blob | File, name: string, signal?: AbortSignal): Promise<void>;
-export function GM_dl(options: ExtendedDownloadRequest): Promise<void>;
-export async function GM_dl(
+function GM_dl(url: string | Blob | File, name: string, signal?: AbortSignal): Promise<void>;
+function GM_dl(options: ExtendedDownloadRequest): Promise<void>;
+async function GM_dl(
 	optionsOrUrl: ExtendedDownloadRequest | string | Blob | File,
 	name?: string,
 	signalParam?: AbortSignal

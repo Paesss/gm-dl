@@ -43,7 +43,7 @@
     "dev": "vite",
     "build": "npm run clean && npm run build:types && npm run build:internal",
     "build:internal": "vite build",
-    "build:types": "npm run clean:types && tsc -p tsconfig.types.json && node scripts/rename-types.mjs",
+    "build:types": "npm run clean:types && tsc -p tsconfig.types.json",
     "clean": "rimraf dist",
     "clean:types": "rimraf dist/types",
     "preview": "vite preview",
