@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import GM_dl from '../src/dl.js';
+import GM_dl from '../src/index.js';
 
 afterEach(() => {
 	vi.unstubAllGlobals();
