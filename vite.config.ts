@@ -13,9 +13,17 @@ export default defineConfig({
 			entry: {
 				index: './src/index.ts',
 			},
-			formats: ['iife', 'es', 'cjs'],
+			formats: ['umd', 'es', 'cjs'],
 			name: 'GM_dl',
-			fileName: (format, entryName) => `${entryName}.${format}.js`,
+			fileName: (format, entryName) => {
+				if(format === 'es') {
+					return `${entryName}.js`
+				} else if(format === 'cjs') {
+					return `${entryName}.cjs`
+				} else {
+					return `${entryName}.${format}.js`
+				}
+			},
 		},
 
 	},
