@@ -13,7 +13,7 @@ export default defineConfig({
 			entry: {
 				index: './src/index.ts',
 			},
-			formats: ['iife', 'es', 'umd'],
+			formats: ['iife', 'es', 'cjs'],
 			name: 'GM_dl',
 			fileName: (format, entryName) => `${entryName}.${format}.js`,
 		},
