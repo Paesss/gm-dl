@@ -1,10 +1,7 @@
 import { resolveAbortError } from './errors.js';
 import type { ExtendedDownloadRequest } from './types.js';
 
-const NOOP = () => {};
-
 export const isBlobOrFile = (v: unknown): v is Blob | File => v instanceof Blob;
-
 
 export function toDownloadRequest(
 	optionsOrUrl: ExtendedDownloadRequest | string | Blob | File,
@@ -14,83 +11,19 @@ export function toDownloadRequest(
 	if (typeof optionsOrUrl === 'string' || isBlobOrFile(optionsOrUrl)) {
 		return { url: optionsOrUrl, name, signal };
 	}
-	const { name: optionsName, signal: optionsSignal } = optionsOrUrl;
 	return {
 		...optionsOrUrl,
-		name: optionsName ?? name,
-		signal: optionsSignal ?? signal,
+		name: optionsOrUrl.name ?? name,
+		signal: optionsOrUrl.signal ?? signal,
 	};
 }
 
 export function isGmDownloadAvailable(): boolean {
-	const downloadMode = GM_info?.downloadMode;
+	const downloadMode = typeof GM_info !== 'undefined' ? GM_info?.downloadMode : undefined;
 	if (downloadMode === 'disabled') return false;
 	return (
 		downloadMode === 'native' || downloadMode === 'browser' || typeof GM_download === 'function'
 	);
-}
-
-export function attachAbortListener<H extends GmAbortHandle<any> = GmAbortHandle>(
-	signal: AbortSignal | undefined,
-	onAbort: (reason: Error) => void,
-	getAbortHandle: () => H | undefined
-): () => void {
-	if (!signal) return NOOP;
-
-	if (signal.aborted) {
-		onAbort(resolveAbortError(signal));
-		return NOOP;
-	}
-
-	const abortHandler = () => {
-		getAbortHandle()?.abort();
-		onAbort(resolveAbortError(signal));
-	};
-
-	signal.addEventListener('abort', abortHandler, { once: true });
-	return () => signal.removeEventListener('abort', abortHandler);
-}
-
-export function createOnceGuard(cleanup: () => void) {
-	let settled = false;
-
-	return <Args extends unknown[], R>(fn?: (...args: Args) => R) =>
-		(...args: Args): R | undefined => {
-			if (settled) return;
-			settled = true;
-			cleanup();
-			return fn?.(...args);
-		};
-}
-
-export function executeAbortable<H extends GmAbortHandle<any> = GmAbortHandle>(
-	signal: AbortSignal | undefined,
-	reject: (reason: unknown) => void,
-	executor: (guard: ReturnType<typeof createOnceGuard>) => H | undefined,
-	onAbort?: () => void
-): void {
-	let cleanup = NOOP;
-	let abortHandle: H | undefined;
-
-	const guard = createOnceGuard(() => cleanup());
-
-	cleanup = attachAbortListener(
-		signal,
-		guard((reason) => {
-			onAbort?.();
-			reject(reason);
-		}),
-		() => abortHandle
-	);
-
-	if (signal?.aborted) return;
-
-	try {
-		abortHandle = executor(guard);
-	} catch (err) {
-		cleanup();
-		reject(err);
-	}
 }
 
 export function triggerBlobDownload(
@@ -106,4 +39,66 @@ export function triggerBlobDownload(
 	anchor.click();
 	anchor.remove();
 	setTimeout(() => URL.revokeObjectURL(objectUrl), revokeDelayMs);
+}
+
+interface AbortablePromiseOptions<T> {
+	signal?: AbortSignal;
+	onAbort?: () => void;
+	run: (
+		resolve: (value: T | PromiseLike<T>) => void,
+		reject: (reason?: unknown) => void
+	) => (() => void) | undefined;
+}
+
+/**
+ * Creates a Promise tied to an AbortSignal, automatically cleaning up
+ * event listeners and calling the cancellation handle on abort.
+ */
+export function createAbortablePromise<T>({
+	signal,
+	onAbort,
+	run,
+}: AbortablePromiseOptions<T>): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		let cancelHandle: (() => void) | undefined;
+
+		const cleanup = () => {
+			if (signal) {
+				signal.removeEventListener('abort', handleAbort);
+			}
+		};
+
+		const handleAbort = () => {
+			try {
+				cancelHandle?.();
+			} catch {}
+			onAbort?.();
+			safeReject(resolveAbortError(signal));
+		};
+
+		const safeResolve = (val: T | PromiseLike<T>) => {
+			cleanup();
+			resolve(val);
+		};
+
+		const safeReject = (err?: unknown) => {
+			cleanup();
+			reject(err);
+		};
+
+		if (signal?.aborted) {
+			handleAbort();
+			return;
+		}
+
+		if (signal) {
+			signal.addEventListener('abort', handleAbort, { once: true });
+		}
+
+		try {
+			cancelHandle = run(safeResolve, safeReject);
+		} catch (err) {
+			safeReject(err);
+		}
+	});
 }
