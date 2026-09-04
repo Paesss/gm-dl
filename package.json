@@ -1,6 +1,6 @@
 {
   "name": "gm-dl",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A lightweight userscript download helper with native GM_download support and a safe XHR fallback.",
   "keywords": [
     "download",
